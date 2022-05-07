@@ -1,6 +1,9 @@
+from collections import namedtuple
 import networkx as nx
 import numpy as np
 from dispatcher import Dispatcher
+from stnu import Stnu
+from fast_dc import EdgeType, FastDc
 
 from temporal_network import (SimpleContingentTemporalConstraint,
                                           SimpleTemporalConstraint,
@@ -8,6 +11,7 @@ from temporal_network import (SimpleContingentTemporalConstraint,
 from networks import MaSTNU
 from solve_decoupling import solve_decoupling
 
+StnuEdge = namedtuple('StnuEdge', ['fro', 'to', 'lower_bound', 'upper_bound'])
 
 def example_mastnu():
     """Test example in Casanova's paper."""
@@ -41,21 +45,20 @@ def example_mastnu():
 
     return mastnu, agents
 
-def get_independent_STNUs(decoupling, agent):
+def get_independent_STNU(decoupling, agent):
     decoupled = decoupling.agent_to_decoupling(agent)
-    d_graph = nx.DiGraph()
+    controllable_edges = []
+    uncontrollable_edges = []
+    nodes = set()
     for a in decoupled:
-        d_graph.add_edge(a.s, a.e, weight=a.ub)
-        d_graph.add_edge(a.e, a.s, weight=-a.lb)
-        # add special edges
+        nodes.add(a.s)
+        nodes.add(a.e)
+        new_edge = StnuEdge(a.s, a.e, a.lb, a.ub)
         if type(a) == SimpleContingentTemporalConstraint:
-            attrs = {(a.s, a.e): {"weight": a.lb, "case": "lower", "letter": a.e}, (a.e, a.s): {"weight": -a.ub, "case": "upper", "letter": a.e}}
-            nx.set_edge_attributes(d_graph, attrs)
-    return d_graph
-
-def dc_checking(d_graph):
-    # probably use what I found
-    pass
+            uncontrollable_edges.append(new_edge)
+        else:
+            controllable_edges.append(new_edge)
+    return controllable_edges, uncontrollable_edges
 
 def online_dispatch(dispatchable_form, dispatcher):
     """Algorithm to dispatch online. It should use the Python time module and make
@@ -134,17 +137,34 @@ def online_dispatch(dispatchable_form, dispatcher):
 def main():
     mastnu, agents = example_mastnu()
     decoupling, conflicts, stats = solve_decoupling(mastnu, output_stats=True)
-    d_graphs = {}
+
     for agent in agents:
         # get independent STNUs
-        d_graph = get_independent_STNUs(decoupling, agent)
-        d_graphs[agent] = d_graph # unnecessary but here just in case I might need it later
+        controllable_edges, uncontrollable_edges = get_independent_STNU(decoupling, agent)
+        stnu = Stnu()
+        stnu.set_values(controllable_edges, uncontrollable_edges)
 
-        # dc-checking algorithm
-        dispatchable = dc_checking(d_graph)
+        # run DC Checking
+        algo = FastDc()
+        all_edges = algo.solve(stnu)
+
+        # delete unnecessary edges for dispatching
+        to_delete = set()
+        for e in all_edges:
+            if e.type == EdgeType.UPPER_CASE:
+                to_delete.add(frozenset([e.renaming[e.fro], e.renaming[e.to]]))
         
-        dispatcher = Dispatcher()
-        online_dispatch(dispatchable, dispatcher)
+        dispatchable = []
+        for e in all_edges:
+            current_edge = frozenset([e.renaming[e.fro], e.renaming[e.to]])
+            for pair in to_delete:
+                if pair == current_edge and e.type != EdgeType.UPPER_CASE:
+                    print(f'deleting pair {pair}')
+                else:
+                    dispatchable.append(e)
 
+        assert len(dispatchable) == len(all_edges) - (len(to_delete) * 3)
+        
+        
 if __name__ == "__main__":
     main()
