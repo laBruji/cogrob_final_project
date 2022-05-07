@@ -1,7 +1,7 @@
 import networkx as nx
 import numpy as np
 
-from dc_checking.temporal_network import (SimpleContingentTemporalConstraint,
+from temporal_network import (SimpleContingentTemporalConstraint,
                                           SimpleTemporalConstraint,
                                           TemporalNetwork)
 from networks import MaSTNU
