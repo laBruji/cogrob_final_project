@@ -9,7 +9,7 @@ from networks import MaSTNU
 from solve_decoupling import solve_decoupling
 
 
-def example_stnu():
+def example_mastnu():
     """Test example in Casanova's paper."""
 
     ext_conts = [SimpleContingentTemporalConstraint('a1', 'b1', 1, 4, 'c1'),
@@ -49,12 +49,12 @@ def get_independent_STNUs(decoupling, agent):
         d_graph.add_edge(a.e, a.s, weight=-a.lb)
         # add special edges
         if type(a) == SimpleContingentTemporalConstraint:
-            attrs = {(a.s, a.e): {"weight": a.lb, "case": "lower"}, (a.e, a.s): {"weight": -a.ub, "case": "upper"}}
+            attrs = {(a.s, a.e): {"weight": a.lb, "case": "lower", "letter": a.e}, (a.e, a.s): {"weight": -a.ub, "case": "upper", "letter": a.e}}
             nx.set_edge_attributes(d_graph, attrs)
     return d_graph
 
 def dc_checking(d_graph):
-    # TODO
+    # probably use what I found
     pass
 
 def online_dispatch(dispatchable_form, dispatcher):
@@ -130,8 +130,9 @@ def online_dispatch(dispatchable_form, dispatcher):
     # All done!
     dispatcher.done()
 
+
 def main():
-    mastnu, agents = example_stnu()
+    mastnu, agents = example_mastnu()
     decoupling, conflicts, stats = solve_decoupling(mastnu, output_stats=True)
     d_graphs = {}
     for agent in agents:
@@ -141,7 +142,7 @@ def main():
 
         # dc-checking algorithm
         dispatchable = dc_checking(d_graph)
-
+        
         dispatcher = Dispatcher()
         online_dispatch(dispatchable, dispatcher)
 
