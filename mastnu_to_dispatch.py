@@ -10,7 +10,7 @@ from temporal_network import (SimpleContingentTemporalConstraint,
                                           TemporalNetwork)
 from networks import MaSTNU
 from solve_decoupling import solve_decoupling
-from multiprocessing import Pool
+import threading
 
 StnuEdge = namedtuple('StnuEdge', ['fro', 'to', 'lower_bound', 'upper_bound'])
 
@@ -136,7 +136,7 @@ def main():
     mastnu, agents = example_mastnu()
     decoupling, conflicts, stats = solve_decoupling(mastnu, output_stats=True)
 
-    dispatchable_forms = []
+    dispatchable_forms = {}
     agent_nodes = {}
     for agent in agents:
         # get independent STNUs
@@ -167,11 +167,13 @@ def main():
             else:
                 dispatchable.add_edges_from([(e.renaming[e.fro], e.renaming[e.to], {"weight" : e.value})])
         
-        dispatchable_forms.append(dispatchable)
+        dispatchable_forms[agent] = dispatchable
         agent_nodes[agent] = nodes
+    
+    
     # dispatch events
-    dispatcher = Dispatcher()
-    online_dispatch(dispatchable_forms[0], agent_nodes["agent-a"], dispatcher)
-        
+    for agent in agents:
+        threading.Thread(target = online_dispatch, args = (dispatchable_forms[agent], agent_nodes[agent], Dispatcher())).start()
+
 if __name__ == "__main__":
     main()
