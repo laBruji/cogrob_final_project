@@ -5,46 +5,12 @@ from dispatcher import Dispatcher
 from stnu import Stnu
 from fast_dc import EdgeType, FastDc
 
-from temporal_network import (SimpleContingentTemporalConstraint,
-                                          SimpleTemporalConstraint,
-                                          TemporalNetwork)
-from networks import MaSTNU
+from temporal_network import SimpleContingentTemporalConstraint
 from solve_decoupling import solve_decoupling
 import threading
+import examples
 
 StnuEdge = namedtuple('StnuEdge', ['fro', 'to', 'lower_bound', 'upper_bound'])
-
-def example_mastnu():
-    """Test example in Casanova's paper."""
-
-    ext_conts = [SimpleContingentTemporalConstraint('a1', 'b1', 1, 4, 'c1'),
-            SimpleContingentTemporalConstraint('b3', 'a3', 1, 5, 'c3')]
-    ext_reqs = [SimpleTemporalConstraint('b2', 'a2', 6, 8, 'c2')]
-
-    agent2network = {}
-
-    agent_a_network = TemporalNetwork()
-    agent_a_network.add_constraint(SimpleTemporalConstraint('z', 'a1', 0, 5, 'c4'))
-    agent_a_network.add_constraint(SimpleTemporalConstraint('a2', 'a3', 1, 10, 'c5'))
-    agent_a_network.add_event('z')
-    agent2network['agent-a'] = agent_a_network
-
-    agent_b_network = TemporalNetwork()
-    agent_b_network.add_constraint(SimpleTemporalConstraint('b1', 'b2', 4, 6, 'c6'))
-    agent_b_network.add_constraint(SimpleTemporalConstraint('b2', 'b3', 6, 12, 'c7'))
-    agent_b_network.add_event('z')
-    agent2network['agent-b'] = agent_b_network
-
-    mastnu = MaSTNU(agent2network, ext_reqs, ext_conts, 'z')
-
-    agents = list(mastnu.agent2network.keys())
-
-    # print(mastnu.event2agent)
-    # print(mastnu.external_contingents)
-    # print(mastnu.get_shared_events())
-    # print(compile_event_to_agent(agent2network, 'z'))
-
-    return mastnu, agents
 
 def get_independent_STNU(decoupling, agent):
     decoupled = decoupling.agent_to_decoupling(agent)
@@ -133,7 +99,7 @@ def online_dispatch(dispatchable_form, events, dispatcher):
 
 
 def main():
-    mastnu, agents = example_mastnu()
+    mastnu, agents = examples.test_nikhil_example_delay_5_icaps()
     decoupling, conflicts, stats = solve_decoupling(mastnu, output_stats=True)
 
     dispatchable_forms = {}
@@ -148,7 +114,7 @@ def main():
         algo = FastDc()
         all_edges = algo.solve(stnu)
 
-        # delete unnecessary edges for dispatching
+        # prepare data for dispatching
         to_delete = set()
         nodes = set()
         for e in all_edges:
