@@ -10,6 +10,7 @@ from temporal_network import (SimpleContingentTemporalConstraint,
                                           TemporalNetwork)
 from networks import MaSTNU
 from solve_decoupling import solve_decoupling
+from multiprocessing import Pool
 
 StnuEdge = namedtuple('StnuEdge', ['fro', 'to', 'lower_bound', 'upper_bound'])
 
@@ -60,14 +61,11 @@ def get_independent_STNU(decoupling, agent):
             controllable_edges.append(new_edge)
     return controllable_edges, uncontrollable_edges
 
-def online_dispatch(dispatchable_form, dispatcher):
+def online_dispatch(dispatchable_form, events, dispatcher):
     """Algorithm to dispatch online. It should use the Python time module and make
     sure that events are executed as close as possible to the proper times. Method
     should not return until enough real-world time has passed to execute the entire plan.
     """
-    N = dispatchable_form.number_of_nodes()
-    events = list(dispatchable_form.nodes())
-    unscheduled_events = set(dispatchable_form.nodes())
     exec_windows = {k:(-np.inf, np.inf) for k in events}
     enabled_events = []
     executed_events = set()
@@ -106,7 +104,7 @@ def online_dispatch(dispatchable_form, dispatcher):
     # Start dispatching!
     dispatcher.start()
     
-    while len(executed_events) != N:
+    while len(executed_events) != len(events):
         # sort current events
         enabled_events = sorted(enabled_events, key=lambda x: x[0])
         # get event that should happen first
@@ -138,6 +136,8 @@ def main():
     mastnu, agents = example_mastnu()
     decoupling, conflicts, stats = solve_decoupling(mastnu, output_stats=True)
 
+    dispatchable_forms = []
+    agent_nodes = {}
     for agent in agents:
         # get independent STNUs
         controllable_edges, uncontrollable_edges = get_independent_STNU(decoupling, agent)
@@ -150,21 +150,28 @@ def main():
 
         # delete unnecessary edges for dispatching
         to_delete = set()
+        nodes = set()
         for e in all_edges:
+            nodes.add(e.renaming[e.fro])
+            nodes.add(e.renaming[e.to])
             if e.type == EdgeType.UPPER_CASE:
                 to_delete.add(frozenset([e.renaming[e.fro], e.renaming[e.to]]))
         
-        dispatchable = []
+        dispatchable = nx.DiGraph()
         for e in all_edges:
             current_edge = frozenset([e.renaming[e.fro], e.renaming[e.to]])
-            for pair in to_delete:
-                if pair == current_edge and e.type != EdgeType.UPPER_CASE:
-                    print(f'deleting pair {pair}')
-                else:
-                    dispatchable.append(e)
-
-        assert len(dispatchable) == len(all_edges) - (len(to_delete) * 3)
+            if current_edge in to_delete and e.type != EdgeType.UPPER_CASE:
+                continue
+            elif e.type == EdgeType.UPPER_CASE:
+                dispatchable.add_edges_from([(e.renaming[e.fro], e.renaming[e.to], {"weight": e.value, "letter": e.maybe_letter})])
+            else:
+                dispatchable.add_edges_from([(e.renaming[e.fro], e.renaming[e.to], {"weight" : e.value})])
         
+        dispatchable_forms.append(dispatchable)
+        agent_nodes[agent] = nodes
+    # dispatch events
+    dispatcher = Dispatcher()
+    online_dispatch(dispatchable_forms[0], agent_nodes["agent-a"], dispatcher)
         
 if __name__ == "__main__":
     main()
