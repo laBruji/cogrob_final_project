@@ -4,6 +4,7 @@
 Dispatcher class to help with online scheduling
 """
 
+import re
 import time
 import numpy as np
 
@@ -30,8 +31,9 @@ class Dispatcher():
         return self.time_start
 
     def done(self):
-        if not self.quiet:
-            self.print_time_message("Done!", self.time())
+        # if not self.quiet:
+        #     self.print_time_message("Done!", self.time())
+        pass
 
     def time(self):
         if self.sim_time:
@@ -60,7 +62,6 @@ class Dispatcher():
             delay = 0.0
         t = self.time()
         self.execution_trace[event] = t
-
         if not self.quiet:
             self.print_time_message("Dispatched {} {}".format(
                                         event, ("" if delay == 0.0 else "(delay {:0.4f}s)".format(delay))),

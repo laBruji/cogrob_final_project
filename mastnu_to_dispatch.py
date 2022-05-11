@@ -1,9 +1,13 @@
 from collections import namedtuple
+import re
+import string
+from matplotlib import pyplot as plt
+import matplotlib
 import networkx as nx
 import numpy as np
 from dispatcher import Dispatcher
 from stnu import Stnu
-from fast_dc import EdgeType, FastDc
+from fast_dc import EdgeType, FastDc, Edge
 
 from temporal_network import SimpleContingentTemporalConstraint
 from solve_decoupling import solve_decoupling
@@ -13,6 +17,8 @@ import examples
 StnuEdge = namedtuple('StnuEdge', ['fro', 'to', 'lower_bound', 'upper_bound'])
 
 def get_independent_STNU(decoupling, agent):
+    """ Returns a tuple of (controllable, uncontrollable) events for the agent's STNU
+    resulting from decoupling. """
     decoupled = decoupling.agent_to_decoupling(agent)
     controllable_edges = []
     uncontrollable_edges = []
@@ -79,9 +85,9 @@ def online_dispatch(dispatchable_form, events, dispatcher):
         to_wait = exec_windows[current_event][0] - dispatcher.time()
         if to_wait > 0:
             dispatcher.sleep(to_wait)
-        
         if current_event not in executed_events:
-            t_i = dispatcher.dispatch(current_event)
+            if not re.search(r'_[0-9]', current_event):
+                t_i = dispatcher.dispatch(current_event)
             exec_windows[current_event] = (t_i, t_i)
             propagate(current_event, t_i)
             executed_events.add(current_event)
@@ -97,9 +103,44 @@ def online_dispatch(dispatchable_form, events, dispatcher):
     # All done!
     dispatcher.done()
 
+def graph_stnu(G):
+    """ Graph the Directed Graph G of an STNU. """
+    pos=nx.circular_layout(G)
+    nx.draw(G, pos, with_labels=True, node_size=800, connectionstyle='arc3, rad = 0.1')
+    labels = nx.get_edge_attributes(G,'weight')
+    letters = nx.get_edge_attributes(G, 'letter')
+    new_labels = {}
+    for k, v in labels.items():
+        new_labels[k] = f'{letters[k]}{v}' 
+    nx.draw_networkx_edge_labels(G,pos,label_pos=0.3, edge_labels=new_labels, rotate=False)
+    plt.show()
+  
+def graph_mastnu(constraints):
+    """ Graph the Directed Graph of a MaSTNU defined by contraints. """
+    stc, sctc = [], []
+    G = nx.DiGraph()
+    for c in constraints:
+        if type(c) == SimpleContingentTemporalConstraint:
+            G.add_edges_from([(c.s, c.e, {"weight": f'[{c.lb}, {c.ub}]'})])
+            sctc.append((c.s, c.e))
+        else:
+            G.add_edges_from([(c.s, c.e, {"weight": f'[{c.lb}, {c.ub}]'})])
+            stc.append((c.s, c.e))
+    
+    pos = nx.circular_layout(G)
+    nx.draw(G, pos, with_labels=True, node_size=1000, node_color='#4ba8cc', edge_color='#4ba8cc', arrowsize=25, font_color='#dcddde', font_weight='bold')
+    labels = nx.get_edge_attributes(G,'weight')
+    
+    nx.draw_networkx_edges(G, pos, edgelist=stc)
+    nx.draw_networkx_edges(G, pos, edgelist=sctc, edge_color='#4ba8cc', style='dashed', width=3)
+    nx.draw_networkx_edge_labels(G,pos,label_pos=0.5, edge_labels=labels)
+    
+    plt.show()
 
 def main():
-    mastnu, agents = examples.test_nikhil_example_delay_5_icaps()
+    mastnu, agents, constraints = examples.lecture_example()
+    graph_mastnu(constraints)
+
     decoupling, conflicts, stats = solve_decoupling(mastnu, output_stats=True)
 
     dispatchable_forms = {}
@@ -107,6 +148,8 @@ def main():
     for agent in agents:
         # get independent STNUs
         controllable_edges, uncontrollable_edges = get_independent_STNU(decoupling, agent)
+        
+        # encode as STNU
         stnu = Stnu()
         stnu.set_values(controllable_edges, uncontrollable_edges)
 
@@ -129,15 +172,17 @@ def main():
             if current_edge in to_delete and e.type != EdgeType.UPPER_CASE:
                 continue
             elif e.type == EdgeType.UPPER_CASE:
-                dispatchable.add_edges_from([(e.renaming[e.fro], e.renaming[e.to], {"weight": e.value, "letter": e.maybe_letter})])
+                dispatchable.add_edges_from([(e.renaming[e.fro], e.renaming[e.to], {"weight": e.value, "letter": f'{e.renaming[e.fro].upper()}:'})])
             else:
-                dispatchable.add_edges_from([(e.renaming[e.fro], e.renaming[e.to], {"weight" : e.value})])
+                dispatchable.add_edges_from([(e.renaming[e.fro], e.renaming[e.to], {"weight" : e.value, "letter": f'{e.renaming[e.fro]}\u2192{e.renaming[e.to]}:'})])
         
+        graph_stnu(dispatchable)
+
         dispatchable_forms[agent] = dispatchable
         agent_nodes[agent] = nodes
     
     
-    # dispatch events
+    # # dispatch events
     for agent in agents:
         threading.Thread(target = online_dispatch, args = (dispatchable_forms[agent], agent_nodes[agent], Dispatcher())).start()
 

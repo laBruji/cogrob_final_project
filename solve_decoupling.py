@@ -62,6 +62,7 @@ def solve_decoupling(mastnu, shared_events=None, output_stats=False, objective=N
             # and extract privacy-preserving conflict if not.
             suc = True
             for agent, network in mastnu.agent2network.items():
+                
                 decoupling_constraints = decoupling.agent_to_decoupling(agent)
                 if output_stats:
                     start = timer()
